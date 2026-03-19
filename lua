@@ -1,274 +1,201 @@
-local httpService = game:GetService('HttpService')
+-- This is a new version   
+  
+local IconModule = {  
+    IconsType = "lucide",  
+      
+    New = nil,  
+    IconThemeTag = nil,  
+      
+    Icons = {  
+        ["lucide"] = loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/Dabixic/qwezxczx/refs/heads/main/lua"))(),  
+        ["craft"] = loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/Dabixic/ssss/refs/heads/main/lua"))(),  
+        ["geist"] = loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/Dabixic/icons/refs/heads/main/.lua"))(),  
+    },
+}  
+  
+local function parseIconString(iconString)  
+    if type(iconString) == "string" then  
+        local splitIndex = iconString:find(":")  
+        if splitIndex then  
+            local iconType = iconString:sub(1, splitIndex - 1)  
+            local iconName = iconString:sub(splitIndex + 1)  
+            return iconType, iconName  
+        end  
+    end  
+    return nil, iconString  
+end  
 
-local SaveManager = {} do
-	SaveManager.Folder = 'LinoriaLibSettings'
-	SaveManager.Ignore = {}
-	SaveManager.Parser = {
-		Toggle = {
-			Save = function(idx, object) 
-				return { type = 'Toggle', idx = idx, value = object.Value } 
-			end,
-			Load = function(idx, data)
-				if Toggles[idx] then 
-					Toggles[idx]:SetValue(data.value)
-				end
-			end,
-		},
-		Slider = {
-			Save = function(idx, object)
-				return { type = 'Slider', idx = idx, value = tostring(object.Value) }
-			end,
-			Load = function(idx, data)
-				if Options[idx] then 
-					Options[idx]:SetValue(data.value)
-				end
-			end,
-		},
-		Dropdown = {
-			Save = function(idx, object)
-				return { type = 'Dropdown', idx = idx, value = object.Value, mutli = object.Multi }
-			end,
-			Load = function(idx, data)
-				if Options[idx] then 
-					Options[idx]:SetValue(data.value)
-				end
-			end,
-		},
-		ColorPicker = {
-			Save = function(idx, object)
-				return { type = 'ColorPicker', idx = idx, value = object.Value:ToHex(), transparency = object.Transparency }
-			end,
-			Load = function(idx, data)
-				if Options[idx] then 
-					Options[idx]:SetValueRGB(Color3.fromHex(data.value), data.transparency)
-				end
-			end,
-		},
-		KeyPicker = {
-			Save = function(idx, object)
-				return { type = 'KeyPicker', idx = idx, mode = object.Mode, key = object.Value }
-			end,
-			Load = function(idx, data)
-				if Options[idx] then 
-					Options[idx]:SetValue({ data.key, data.mode })
-				end
-			end,
-		},
-
-		Input = {
-			Save = function(idx, object)
-				return { type = 'Input', idx = idx, text = object.Value }
-			end,
-			Load = function(idx, data)
-				if Options[idx] and type(data.text) == 'string' then
-					Options[idx]:SetValue(data.text)
-				end
-			end,
-		},
-	}
-
-	function SaveManager:SetIgnoreIndexes(list)
-		for _, key in next, list do
-			self.Ignore[key] = true
-		end
-	end
-
-	function SaveManager:SetFolder(folder)
-		self.Folder = folder;
-		self:BuildFolderTree()
-	end
-
-	function SaveManager:Save(name)
-		if (not name) then
-			return false, 'no config file is selected'
-		end
-
-		local fullPath = self.Folder .. '/settings/' .. name .. '.json'
-
-		local data = {
-			objects = {}
-		}
-
-		for idx, toggle in next, Toggles do
-			if self.Ignore[idx] then continue end
-
-			table.insert(data.objects, self.Parser[toggle.Type].Save(idx, toggle))
-		end
-
-		for idx, option in next, Options do
-			if not self.Parser[option.Type] then continue end
-			if self.Ignore[idx] then continue end
-
-			table.insert(data.objects, self.Parser[option.Type].Save(idx, option))
-		end	
-
-		local success, encoded = pcall(httpService.JSONEncode, httpService, data)
-		if not success then
-			return false, 'failed to encode data'
-		end
-
-		writefile(fullPath, encoded)
-		return true
-	end
-
-	function SaveManager:Load(name)
-		if (not name) then
-			return false, 'no config file is selected'
-		end
-		
-		local file = self.Folder .. '/settings/' .. name .. '.json'
-		if not isfile(file) then return false, 'invalid file' end
-
-		local success, decoded = pcall(httpService.JSONDecode, httpService, readfile(file))
-		if not success then return false, 'decode error' end
-
-		for _, option in next, decoded.objects do
-			if self.Parser[option.type] then
-				task.spawn(function() self.Parser[option.type].Load(option.idx, option) end) -- task.spawn() so the config loading wont get stuck.
-			end
-		end
-
-		return true
-	end
-
-	function SaveManager:IgnoreThemeSettings()
-		self:SetIgnoreIndexes({ 
-			"BackgroundColor", "MainColor", "AccentColor", "OutlineColor", "FontColor", -- themes
-			"ThemeManager_ThemeList", 'ThemeManager_CustomThemeList', 'ThemeManager_CustomThemeName', -- themes
-		})
-	end
-
-	function SaveManager:BuildFolderTree()
-		local paths = {
-			self.Folder,
-			self.Folder .. '/themes',
-			self.Folder .. '/settings'
-		}
-
-		for i = 1, #paths do
-			local str = paths[i]
-			if not isfolder(str) then
-				makefolder(str)
-			end
-		end
-	end
-
-	function SaveManager:RefreshConfigList()
-		local list = listfiles(self.Folder .. '/settings')
-
-		local out = {}
-		for i = 1, #list do
-			local file = list[i]
-			if file:sub(-5) == '.json' then
-				-- i hate this but it has to be done ...
-
-				local pos = file:find('.json', 1, true)
-				local start = pos
-
-				local char = file:sub(pos, pos)
-				while char ~= '/' and char ~= '\\' and char ~= '' do
-					pos = pos - 1
-					char = file:sub(pos, pos)
-				end
-
-				if char == '/' or char == '\\' then
-					table.insert(out, file:sub(pos + 1, start - 1))
-				end
-			end
-		end
-		
-		return out
-	end
-
-	function SaveManager:SetLibrary(library)
-		self.Library = library
-	end
-
-	function SaveManager:LoadAutoloadConfig()
-		if isfile(self.Folder .. '/settings/autoload.txt') then
-			local name = readfile(self.Folder .. '/settings/autoload.txt')
-
-			local success, err = self:Load(name)
-			if not success then
-				return self.Library:Notify('Failed to load autoload config: ' .. err)
-			end
-
-			self.Library:Notify(string.format('Auto loaded config %q', name))
-		end
-	end
-
-
-	function SaveManager:BuildConfigSection(tab)
-		assert(self.Library, 'Must set SaveManager.Library')
-
-		local section = tab:AddRightGroupbox('Configuration')
-
-		section:AddInput('SaveManager_ConfigName',    { Text = 'Config name' })
-		section:AddDropdown('SaveManager_ConfigList', { Text = 'Config list', Values = self:RefreshConfigList(), AllowNull = true })
-
-		section:AddDivider()
-
-		section:AddButton('Create config', function()
-			local name = Options.SaveManager_ConfigName.Value
-
-			if name:gsub(' ', '') == '' then 
-				return self.Library:Notify('Invalid config name (empty)', 2)
-			end
-
-			local success, err = self:Save(name)
-			if not success then
-				return self.Library:Notify('Failed to save config: ' .. err)
-			end
-
-			self.Library:Notify(string.format('Created config %q', name))
-
-			Options.SaveManager_ConfigList:SetValues(self:RefreshConfigList())
-			Options.SaveManager_ConfigList:SetValue(nil)
-		end):AddButton('Load config', function()
-			local name = Options.SaveManager_ConfigList.Value
-
-			local success, err = self:Load(name)
-			if not success then
-				return self.Library:Notify('Failed to load config: ' .. err)
-			end
-
-			self.Library:Notify(string.format('Loaded config %q', name))
-		end)
-
-		section:AddButton('Overwrite config', function()
-			local name = Options.SaveManager_ConfigList.Value
-
-			local success, err = self:Save(name)
-			if not success then
-				return self.Library:Notify('Failed to overwrite config: ' .. err)
-			end
-
-			self.Library:Notify(string.format('Overwrote config %q', name))
-		end)
-
-		section:AddButton('Refresh list', function()
-			Options.SaveManager_ConfigList:SetValues(self:RefreshConfigList())
-			Options.SaveManager_ConfigList:SetValue(nil)
-		end)
-
-		section:AddButton('Set as autoload', function()
-			local name = Options.SaveManager_ConfigList.Value
-			writefile(self.Folder .. '/settings/autoload.txt', name)
-			SaveManager.AutoloadLabel:SetText('Current autoload config: ' .. name)
-			self.Library:Notify(string.format('Set %q to auto load', name))
-		end)
-
-		SaveManager.AutoloadLabel = section:AddLabel('Current autoload config: none', true)
-
-		if isfile(self.Folder .. '/settings/autoload.txt') then
-			local name = readfile(self.Folder .. '/settings/autoload.txt')
-			SaveManager.AutoloadLabel:SetText('Current autoload config: ' .. name)
-		end
-
-		SaveManager:SetIgnoreIndexes({ 'SaveManager_ConfigList', 'SaveManager_ConfigName' })
-	end
-
-	SaveManager:BuildFolderTree()
+function IconModule.AddIcons(packName, iconsData)
+    if type(packName) ~= "string" or type(iconsData) ~= "table" then
+        error("AddIcons: packName must be string, iconsData must be table")
+        return
+    end
+    
+    if not IconModule.Icons[packName] then
+        IconModule.Icons[packName] = {
+            Icons = {},
+            Spritesheets = {}
+        }
+    end
+    
+    for iconName, iconValue in pairs(iconsData) do
+        if type(iconValue) == "number" or (type(iconValue) == "string" and iconValue:match("^rbxassetid://")) then
+            local imageId = iconValue
+            if type(iconValue) == "number" then
+                imageId = "rbxassetid://" .. tostring(iconValue)
+            end
+            
+            IconModule.Icons[packName].Icons[iconName] = {
+                Image = imageId,
+                ImageRectSize = Vector2.new(0, 0),
+                ImageRectPosition = Vector2.new(0, 0),
+                Parts = nil
+            }
+            IconModule.Icons[packName].Spritesheets[imageId] = imageId
+            
+        elseif type(iconValue) == "table" then
+            if iconValue.Image and iconValue.ImageRectSize and iconValue.ImageRectPosition then
+                local imageId = iconValue.Image
+                if type(imageId) == "number" then
+                    imageId = "rbxassetid://" .. tostring(imageId)
+                end
+                
+                IconModule.Icons[packName].Icons[iconName] = {
+                    Image = imageId,
+                    ImageRectSize = iconValue.ImageRectSize,
+                    ImageRectPosition = iconValue.ImageRectPosition,
+                    Parts = iconValue.Parts
+                }
+                
+                if not IconModule.Icons[packName].Spritesheets[imageId] then
+                    IconModule.Icons[packName].Spritesheets[imageId] = imageId
+                end
+            else
+                warn("AddIcons: Invalid spritesheet data format for icon '" .. iconName .. "'")
+            end
+        else
+            warn("AddIcons: Unsupported data type for icon '" .. iconName .. "': " .. type(iconValue))
+        end
+    end
 end
-
-return SaveManager
+  
+function IconModule.SetIconsType(iconType)  
+    IconModule.IconsType = iconType  
+end  
+  
+function IconModule.Init(New, IconThemeTag)  
+    IconModule.New = New  
+    IconModule.IconThemeTag = IconThemeTag  
+      
+    return IconModule  
+end  
+  
+function IconModule.Icon(Icon, Type)  
+    local iconType, iconName = parseIconString(Icon)  
+      
+    local targetType = iconType or Type or IconModule.IconsType  
+    local targetName = iconName  
+      
+    local iconSet = IconModule.Icons[targetType]  
+      
+    if iconSet and iconSet.Icons[targetName] then  
+        return {   
+            iconSet.Spritesheets[tostring(iconSet.Icons[targetName].Image)],   
+            iconSet.Icons[targetName],  
+        }  
+    end  
+    return nil  
+end  
+  
+function IconModule.Image(IconConfig)  
+    local Icon = {  
+        Icon = IconConfig.Icon or nil,  
+        Type = IconConfig.Type,  
+        Colors = IconConfig.Colors or { ( IconModule.IconThemeTag or Color3.new(1,1,1) ), Color3.new(1,1,1) },  
+        Size = IconConfig.Size or UDim2.new(0,24,0,24),  
+          
+        IconFrame = nil,  
+    }  
+      
+    local Colors = {}  
+      
+    for _, color in next, Icon.Colors do  
+        Colors[_] = {  
+            ThemeTag = typeof(color) == "string" and color,  
+            Color = typeof(color) == "Color3" and color,  
+        }  
+    end  
+      
+    local IconLabel = IconModule.Icon(Icon.Icon, Icon.Type)  
+      
+    if IconModule.New then  
+        local New = IconModule.New  
+          
+          
+          
+        local IconFrame = New("ImageLabel", {  
+            Size = Icon.Size,  
+            BackgroundTransparency = 1,  
+            ImageColor3 = Colors[1].Color or nil,  
+            ThemeTag = Colors[1].ThemeTag and {  
+                ImageColor3 = Colors[1].ThemeTag  
+            },  
+            Image = IconLabel[1],  
+            ImageRectSize = IconLabel[2].ImageRectSize,  
+            ImageRectOffset = IconLabel[2].ImageRectPosition,  
+        })  
+      
+      
+        if IconLabel[2].Parts then  
+            for _, part in next, IconLabel[2].Parts do  
+                local IconPartLabel = IconModule.Icon(part, Icon.Type)  
+                  
+                local IconPart = New("ImageLabel", {  
+                    Size = UDim2.new(1,0,1,0),  
+                    BackgroundTransparency = 1,  
+                    ImageColor3 = Colors[1 + _].Color or nil,  
+                    ThemeTag = Colors[1 + _].ThemeTag and {  
+                        ImageColor3 = Colors[1 + _].ThemeTag  
+                    },  
+                    Image = IconPartLabel[1],  
+                    ImageRectSize = IconPartLabel[2].ImageRectSize,  
+                    ImageRectOffset = IconPartLabel[2].ImageRectPosition,  
+                    Parent = IconFrame,  
+                })  
+            end  
+        end  
+          
+        Icon.IconFrame = IconFrame  
+    else  
+        local IconFrame = Instance.new("ImageLabel")  
+        IconFrame.Size = Icon.Size  
+        IconFrame.BackgroundTransparency = 1  
+        IconFrame.ImageColor3 = Colors[1].Color  
+        IconFrame.Image = IconLabel[1]  
+        IconFrame.ImageRectSize = IconLabel[2].ImageRectSize  
+        IconFrame.ImageRectOffset = IconLabel[2].ImageRectPosition  
+          
+          
+        if IconLabel[2].Parts then  
+            for _, part in next, IconLabel[2].Parts do  
+                local IconPartLabel = IconModule.Icon(part, Icon.Type)  
+                  
+                local IconPart = Instance.New("ImageLabel")  
+                IconPart.Size = UDim2.new(1,0,1,0)  
+                IconPart.BackgroundTransparency = 1  
+                IconPart.ImageColor3 = Colors[1 + _].Color  
+                IconPart.Image = IconPartLabel[1]  
+                IconPart.ImageRectSize = IconPartLabel[2].ImageRectSize  
+                IconPart.ImageRectOffset = IconPartLabel[2].ImageRectPosition  
+                IconPart.Parent = IconFrame  
+            end  
+        end  
+          
+        Icon.IconFrame = IconFrame  
+    end  
+      
+      
+    return Icon  
+end  
+  
+return IconModule
